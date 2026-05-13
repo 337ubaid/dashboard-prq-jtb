@@ -7,7 +7,6 @@ st.set_page_config(page_title="Overview", page_icon="📊", layout="wide")
 
 st.title("📊 Overview")
 
-# Dummy data for demonstration
 st.subheader("Key Metrics")
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -20,7 +19,6 @@ with col3:
 st.markdown("---")
 
 st.subheader("Trend Penjualan (Contoh ECharts)")
-# Dummy category and values
 categories = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
 values = [120, 200, 150, 80, 70, 110]
 

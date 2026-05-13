@@ -1,7 +1,9 @@
 import streamlit as st
 from streamlit_echarts import st_echarts
 
-def render_bar_chart(categories: list, values: list, title: str = ""):
+PRIMARY_COLOR = "#E60000"
+
+def render_bar_chart(categories: list[str], values: list[float | int], title: str = "") -> None:
     """
     Render a simple bar chart using ECharts.
     """
@@ -24,7 +26,7 @@ def render_bar_chart(categories: list, values: list, title: str = ""):
                 "data": values,
                 "type": "bar",
                 "itemStyle": {
-                    "color": "#E60000" # Warna custom sesuai tema
+                    "color": PRIMARY_COLOR
                 }
             }
         ]
