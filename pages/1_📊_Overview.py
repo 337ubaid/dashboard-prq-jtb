@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 from components.charts import render_bar_chart
 from components.metrics import render_kpi_card
+from utils.helpers import setup_page
 
-st.set_page_config(page_title="Overview", page_icon="📊", layout="wide")
+setup_page(title="Overview")
 
 st.title("📊 Overview")
 
