@@ -23,12 +23,17 @@ def main():
                 
                 filters = {}
                 filters["years"] = st.multiselect("Tahun", options=filter_opts["years"], default=[2026])
+                filters["nipnas_search"] = st.text_input("Cari NO NIPNAS", value="")
                 filters["flags"] = st.multiselect("FLAG REVENUE", options=filter_opts["flags"], default=[])
                 filters["subsegmen"] = st.multiselect("SUBSEGMEN HO", options=filter_opts["subsegmen"], default=[])
-                filters["bam"] = st.multiselect("NAMA BAM", options=filter_opts["bam"], default=[])
+                filters["bam"] = st.multiselect("NAMA AM", options=filter_opts["bam"], default=[])
                 filters["telda"] = st.multiselect("TELDA", options=filter_opts["telda"], default=[])
                 filters["sto"] = st.multiselect("STO", options=filter_opts["sto"], default=[])
-                filters["nipnas_search"] = st.text_input("Cari NO NIPNAS", value="")
+                
+                
+                sharepoint_url = st.secrets["sharepoint"]["cek_nama_pelanggan"]
+                st.markdown(f"🔗 [Cek Nama Pelanggan]({sharepoint_url})")
+                
                 
         with col_content:
             tab_chart, tab_layanan, tab_pelanggan = st.tabs(["Overview", "Layanan", "Rank Pelanggan"])
