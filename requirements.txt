@@ -3,3 +3,5 @@ streamlit-echarts
 google-cloud-bigquery
 db-dtypes
 pandas
+gspread
+google-auth
