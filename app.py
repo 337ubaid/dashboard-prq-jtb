@@ -7,11 +7,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def main():
+def main() -> None:
     st.title("📊 PRQ Dashboard Main Page")
     st.write("Selamat datang di PRQ Dashboard. Silakan pilih menu di sidebar untuk melihat data.")
     
-    st.info("💡 Pilih **Overview** atau **Detail** di sidebar sebelah kiri.")
+    st.info("💡 Pilih menu di sidebar sebelah kiri.")
 
 if __name__ == "__main__":
     main()

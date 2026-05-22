@@ -6,7 +6,7 @@ import pandas as pd
 DATASET = st.secrets["bigquery"]["dataset"]
 
 @st.cache_resource
-def get_bq_client():
+def get_bq_client() -> bigquery.Client:
     """
     Initialize and cache BigQuery Client using Streamlit secrets.
     """
