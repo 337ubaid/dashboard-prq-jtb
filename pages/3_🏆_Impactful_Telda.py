@@ -9,7 +9,7 @@ from utils.helpers import (
     TARGET_EXCELLENT,
     TARGET_GOOD
 )
-from utils.data_processing import load_and_clean_data, build_scorecard_table
+from utils.data_processing import load_and_clean_data, build_scorecard_table, clean_numeric_val
 from components.charts import render_leaderboard_chart, render_trend_chart
 
 # Setup standard page configuration for Impactful Telda
@@ -211,6 +211,73 @@ def _render_actionable_insights(stars: list[dict], criticals: list[dict]) -> Non
         """))
 
 
+def _aggregate_scorecard_data(
+    df_filtered: pd.DataFrame, 
+    selected_teldas: list[str], 
+    selected_quarters: list[str]
+) -> pd.DataFrame:
+    """
+    Aggregate multiple scorecard rows into a single-row DataFrame (G30).
+    Points and percentage metrics are averaged, while counts and revenue are summed.
+    Matches clean code principles (G30 - functions do one thing, G3 - boundaries).
+    """
+    if df_filtered.empty:
+        return pd.DataFrame()
+        
+    df_filtered = df_filtered.copy()
+    agg_row = {}
+    
+    # 1. Handle TELDA and QUARTER names
+    agg_row["TELDA"] = ", ".join(selected_teldas) if len(selected_teldas) > 1 else selected_teldas[0]
+    agg_row["QUARTER"] = ", ".join(selected_quarters) if len(selected_quarters) > 1 else selected_quarters[0]
+    
+    # 2. Handle RANK: "-" if more than 1 Quarter or more than 1 Telda is selected
+    if len(selected_quarters) > 1 or len(selected_teldas) > 1:
+        agg_row["RANK"] = "-"
+    else:
+        agg_row["RANK"] = str(df_filtered["RANK"].values[0]) if "RANK" in df_filtered.columns else "-"
+        
+    # Clean numeric values for all other columns before aggregating
+    cleaned_df = pd.DataFrame()
+    for col in df_filtered.columns:
+        if col in ["TELDA", "QUARTER", "RANK"]:
+            continue
+        cleaned_df[col] = df_filtered[col].apply(clean_numeric_val)
+        
+    # 3. Aggregate columns
+    for col in cleaned_df.columns:
+        if col.endswith("TARGET") or col.endswith("REALIASASI") or col.endswith("REALISASI"):
+            is_percentage = any(pct_indicator in col.upper() for pct_indicator in ["LTS", "VISIT", "C3MR"])
+            if is_percentage:
+                agg_row[col] = cleaned_df[col].mean()
+            else:
+                agg_row[col] = cleaned_df[col].sum()
+        elif col.endswith("POINT") or col == "TOTAL POINT":
+            agg_row[col] = cleaned_df[col].mean()
+            
+    # 4. Recalculate ACH columns based on aggregated Target and Realisasi for mathematical accuracy
+    for col in df_filtered.columns:
+        if any(col.endswith(suffix) for suffix in ["- ACH", " - ACH", " -ACH", "-ACH"]):
+            suffix_len = 0
+            for suffix in ["- ACH", " - ACH", " -ACH", "-ACH"]:
+                if col.endswith(suffix):
+                    suffix_len = len(suffix)
+                    break
+            prefix = col[:-suffix_len].strip()
+            
+            target_col = next((c for c in agg_row.keys() if c.strip().upper().startswith(prefix.upper()) and c.strip().upper().endswith("TARGET")), None)
+            real_col = next((c for c in agg_row.keys() if c.strip().upper().startswith(prefix.upper()) and (c.strip().upper().endswith("REALIASASI") or c.strip().upper().endswith("REALISASI"))), None)
+            
+            if target_col and real_col:
+                target_val = agg_row[target_col]
+                real_val = agg_row[real_col]
+                agg_row[col] = (real_val / target_val * 100) if target_val > 0 else 0.0
+            else:
+                agg_row[col] = cleaned_df[col].mean()
+                
+    return pd.DataFrame([agg_row])
+
+
 def main() -> None:
     """Main entry point to build and render the Impactful Telda dashboard page."""
     df = load_and_clean_data()
@@ -221,53 +288,55 @@ def main() -> None:
             st.subheader("Filter Data")      
             
             quarter_options = ["Q1", "Q2", "Q3", "Q4"]
-            selected_quarter = st.segmented_control(
+            selected_quarters = st.multiselect(
                 "QUARTER", 
                 options=quarter_options, 
-                help="Pilih salah satu kuartal.",
-                default=quarter_options[0],
-                width="stretch",
+                default=[quarter_options[0]],
+                help="Pilih satu atau lebih kuartal."
             )
 
             telda_options = ["BATU", "BLITAR", "BOJONEGORO", "KEDIRI", "MADIUN", "MALANG", "NGANJUK", "PONOROGO"]
-            selected_telda = st.selectbox(
+            selected_teldas = st.multiselect(
                 "TELDA", 
                 options=telda_options, 
-                help="Pilih salah satu TELDA."
+                default=[telda_options[0]],
+                help="Pilih satu atau lebih TELDA."
             )
-            
-            # with st.expander("🔍 Status Koneksi & Seluruh Data", expanded=False):
-            #     if not df.empty:
-            #         st.success(f"✅ Berhasil memuat `{len(df)}` baris data!")
-            #         st.markdown("**Semua Record / Data Mentah:**")
-            #         st.dataframe(df, use_container_width=True)
-            #     else:
-            #         st.warning("⚠️ Belum ada data yang termuat. Silakan masukkan link spreadsheet valid di secrets.toml.")
                 
+    if not selected_quarters or not selected_teldas:
+        with col_content:
+            st.warning("⚠️ Silakan pilih minimal satu QUARTER dan satu TELDA pada filter di sebelah kiri.")
+        return
+        
     df_filtered = df.copy()
     if not df_filtered.empty:
-        if selected_telda:
-            df_filtered = df_filtered[df_filtered["TELDA"] == selected_telda.strip().upper()]
-        if selected_quarter:
-            df_filtered = df_filtered[df_filtered["QUARTER"] == selected_quarter.strip().upper()]
+        df_filtered = df_filtered[
+            df_filtered["TELDA"].str.upper().isin([t.strip().upper() for t in selected_teldas]) &
+            df_filtered["QUARTER"].str.upper().isin([q.strip().upper() for q in selected_quarters])
+        ]
         
     with col_content:      
         if df_filtered.empty:
             st.warning("⚠️ Tidak ada data yang cocok dengan kombinasi filter terpilih.")
             return
             
-        total_point = float(df_filtered["TOTAL POINT"].values[0]) if "TOTAL POINT" in df_filtered.columns else 0.0
-        rank_val = str(df_filtered["RANK"].values[0]) if "RANK" in df_filtered.columns else "-"
+        df_aggregated = _aggregate_scorecard_data(df_filtered, selected_teldas, selected_quarters)
         
-        df_quarter = df[df["QUARTER"] == selected_quarter.strip().upper()]
+        total_point = float(df_aggregated["TOTAL POINT"].values[0]) if "TOTAL POINT" in df_aggregated.columns else 0.0
+        rank_val = str(df_aggregated["RANK"].values[0]) if "RANK" in df_aggregated.columns else "-"
+        
+        df_quarters = df[df["QUARTER"].str.upper().isin([q.strip().upper() for q in selected_quarters])]
         avg_point = 0.0
-        if not df_quarter.empty:
-            df_quarter_points = pd.to_numeric(df_quarter["TOTAL POINT"], errors='coerce').fillna(0)
-            avg_point = df_quarter_points.mean()
+        if not df_quarters.empty:
+            df_quarters_points = pd.to_numeric(df_quarters["TOTAL POINT"], errors='coerce').fillna(0)
+            avg_point = df_quarters_points.mean()
         point_diff = total_point - avg_point
         
+        selected_telda_label = ", ".join(selected_teldas) if len(selected_teldas) <= 3 else f"{len(selected_teldas)} TELDA"
+        selected_quarter_label = ", ".join(selected_quarters)
+        
         # Render top executives KPI cards (G30)
-        _render_executive_kpi_cards(selected_telda, selected_quarter, rank_val, total_point, point_diff)
+        _render_executive_kpi_cards(selected_telda_label, selected_quarter_label, rank_val, total_point, point_diff)
         
         revenue_mapping = {
             "POTS SME": "REV SME - POTS",
@@ -291,10 +360,10 @@ def main() -> None:
             "VISIT": "VISIT"
         }
         
-        # Build scorecard tables once (G5 DRY - single source of truth)
-        rev_scorecard = build_scorecard_table(df_filtered, revenue_mapping)
-        sales_scorecard = build_scorecard_table(df_filtered, sales_mapping)
-        ops_scorecard = build_scorecard_table(df_filtered, operational_mapping)
+        # Build scorecard tables once using aggregated data (G5 DRY - single source of truth)
+        rev_scorecard = build_scorecard_table(df_aggregated, revenue_mapping)
+        sales_scorecard = build_scorecard_table(df_aggregated, sales_mapping)
+        ops_scorecard = build_scorecard_table(df_aggregated, operational_mapping)
         
         # Extract achievements directly from the generated scorecards (G5 DRY)
         all_metrics_performances = []
@@ -321,7 +390,7 @@ def main() -> None:
                 st.subheader("1. Revenue Segmen")
                 st.dataframe(
                     style_scorecard(rev_scorecard.style, format_revenue),
-                    use_container_width=True
+                    width="stretch"
                 )
                 
         with tab_sales:
@@ -329,7 +398,7 @@ def main() -> None:
                 st.subheader("2. Sales & Digital Products")
                 st.dataframe(
                     style_scorecard(sales_scorecard.style, format_count),
-                    use_container_width=True
+                    width="stretch"
                 )
                 
         with tab_ops:
@@ -337,7 +406,7 @@ def main() -> None:
                 st.subheader("3. Operational Metrics")
                 st.dataframe(
                     style_scorecard(ops_scorecard.style, lambda x: f"{x:.2f}%"),
-                    use_container_width=True
+                    width="stretch"
                 )
                 
         with tab_analytics:
@@ -346,10 +415,10 @@ def main() -> None:
                 col_chart1, col_chart2 = st.columns(2)
                 
                 with col_chart1:
-                    render_leaderboard_chart(df, selected_quarter, selected_telda)
+                    render_leaderboard_chart(df, selected_quarters, selected_teldas)
                     
                 with col_chart2:
-                    render_trend_chart(df, selected_telda)
+                    render_trend_chart(df, selected_teldas)
                 
                 # Render stars and criticals insight blocks (G30)
                 _render_actionable_insights(stars, criticals)

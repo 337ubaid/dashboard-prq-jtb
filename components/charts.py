@@ -39,21 +39,28 @@ def render_bar_chart(categories: list[str], values: list[float | int], title: st
 QUARTER_SORT_MAP = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
 
 
-def render_leaderboard_chart(df: pd.DataFrame, selected_quarter: str, selected_telda: str) -> None:
+def render_leaderboard_chart(df: pd.DataFrame, selected_quarter: str | list[str], selected_telda: str | list[str]) -> None:
     """Render standard leaderboard bar chart using ECharts (G30)."""
-    df_q = df[df["QUARTER"] == selected_quarter].copy()
+    # Normalize inputs to list of uppercase strings for robust comparison (G3)
+    quarters = [selected_quarter.upper()] if isinstance(selected_quarter, str) else [q.upper() for q in selected_quarter]
+    teldas_to_highlight = [selected_telda.upper()] if isinstance(selected_telda, str) else [t.upper() for t in selected_telda]
+    
+    df_q = df[df["QUARTER"].str.upper().isin(quarters)].copy()
     if df_q.empty:
         return
         
     df_q["TOTAL POINT"] = pd.to_numeric(df_q["TOTAL POINT"], errors='coerce').fillna(0)
-    df_q = df_q.sort_values(by="TOTAL POINT", ascending=True)
     
-    teldas = df_q["TELDA"].tolist()
-    points = df_q["TOTAL POINT"].tolist()
+    # Group by TELDA and average the total points across selected quarters
+    df_grouped = df_q.groupby("TELDA")["TOTAL POINT"].mean().reset_index()
+    df_grouped = df_grouped.sort_values(by="TOTAL POINT", ascending=True)
+    
+    teldas = df_grouped["TELDA"].tolist()
+    points = df_grouped["TOTAL POINT"].round(2).tolist()
     
     series_data = []
     for t, p in zip(teldas, points):
-        if t.upper() == selected_telda.upper():
+        if t.upper() in teldas_to_highlight:
             series_data.append({
                 "value": p,
                 "itemStyle": {
@@ -90,9 +97,10 @@ def render_leaderboard_chart(df: pd.DataFrame, selected_quarter: str, selected_t
                 }
             })
             
+    quarters_str = ", ".join(quarters)
     options = {
         "title": {
-            "text": f"Leaderboard TELDA - Kuartal {selected_quarter}",
+            "text": f"Leaderboard TELDA - Kuartal {quarters_str}",
             "textStyle": {"fontSize": 14, "fontWeight": "bold", "color": "#1e293b"},
             "left": "center"
         },
@@ -128,22 +136,36 @@ def render_leaderboard_chart(df: pd.DataFrame, selected_quarter: str, selected_t
     st_echarts(options=options, height="350px")
 
 
-def render_trend_chart(df: pd.DataFrame, selected_telda: str) -> None:
+def render_trend_chart(df: pd.DataFrame, selected_telda: str | list[str]) -> None:
     """Render trend evaluation graph across quarters (G30)."""
-    df_t = df[df["TELDA"] == selected_telda].copy()
+    teldas = [selected_telda.upper()] if isinstance(selected_telda, str) else [t.upper() for t in selected_telda]
+    
+    df_t = df[df["TELDA"].str.upper().isin(teldas)].copy()
     if df_t.empty:
         return
         
     df_t["QUARTER_SORT"] = df_t["QUARTER"].map(QUARTER_SORT_MAP).fillna(0)
-    df_t = df_t.sort_values(by="QUARTER_SORT")
     
-    quarters = df_t["QUARTER"].tolist()
-    points = pd.to_numeric(df_t["TOTAL POINT"], errors='coerce').fillna(0).tolist()
-    ranks = pd.to_numeric(df_t["RANK"], errors='coerce').fillna(8).tolist()
+    # Pre-process columns for averaging
+    df_t["TOTAL POINT"] = pd.to_numeric(df_t["TOTAL POINT"], errors='coerce').fillna(0)
+    df_t["RANK"] = pd.to_numeric(df_t["RANK"], errors='coerce').fillna(8)
+    
+    # Group by Quarter to average performance of selected teldas
+    df_grouped = df_t.groupby(["QUARTER_SORT", "QUARTER"]).agg({
+        "TOTAL POINT": "mean",
+        "RANK": "mean"
+    }).reset_index()
+    df_grouped = df_grouped.sort_values(by="QUARTER_SORT")
+    
+    quarters = df_grouped["QUARTER"].tolist()
+    points = df_grouped["TOTAL POINT"].round(2).tolist()
+    ranks = df_grouped["RANK"].round(1).tolist()
+    
+    teldas_str = ", ".join(teldas) if len(teldas) <= 3 else f"{len(teldas)} TELDA"
     
     options = {
         "title": {
-            "text": f"Tren Performa {selected_telda} - Q1 s/d Q4",
+            "text": f"Tren Performa {teldas_str} - Q1 s/d Q4",
             "textStyle": {"fontSize": 14, "fontWeight": "bold", "color": "#1e293b"},
             "left": "center"
         },
@@ -217,3 +239,4 @@ def render_trend_chart(df: pd.DataFrame, selected_telda: str) -> None:
     }
     
     st_echarts(options=options, height="350px")
+
