@@ -408,7 +408,7 @@ def main() -> None:
                     style_scorecard(ops_scorecard.style, lambda x: f"{x:.2f}%"),
                     width="stretch"
                 )
-                
+    
         with tab_analytics:
             with st.container(height=CONTENT_CONTAINER_HEIGHT - 60):
                 st.subheader("Analisis Performa & Visualisasi Storytelling")

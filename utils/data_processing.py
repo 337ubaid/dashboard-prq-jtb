@@ -327,27 +327,69 @@ def load_spreadsheet_data(worksheet_name: str = "LOOKER IMPACTFUL TELDA") -> pd.
 
 
 def clean_numeric_val(val: Any) -> float:
-    """Clean numeric values from string placeholders, commas, and percentage signs."""
+    """Clean numeric values from string placeholders, currency symbols, and any thousand/decimal separators."""
     if pd.isna(val):
         return 0.0
-    val_str = str(val).strip()
-    if val_str in ["-", "", "  - ", "n/a", "N/A"]:
-        return 0.0
-    
-    val_str = val_str.replace('%', '').replace('Rp', '').replace(' ', '')
-    
     if isinstance(val, (int, float)):
         return float(val)
         
+    val_str = str(val).strip()
+    if val_str in ["-", "", "  - ", "n/a", "N/A"]:
+        return 0.0
+        
+    # Remove common non-numeric formatting characters
+    val_str = val_str.replace('%', '').replace('Rp', '').replace(' ', '')
+    
+    # Try parsing directly
     try:
         return float(val_str)
     except ValueError:
-        # If float format is European (comma as decimal, dot as thousand separator)
-        val_str = val_str.replace('.', '').replace(',', '.')
+        pass
+        
+    # Handle thousand and decimal separators:
+    # 1. Standard English/US format with commas as thousand separators and dot as decimal (e.g. 1,234,567.89 or 1,234,567)
+    # 2. European/Indonesian format with dots as thousand separators and comma as decimal (e.g. 1.234.567,89 or 1.234.567)
+    
+    has_comma = ',' in val_str
+    has_dot = '.' in val_str
+    
+    if has_comma and has_dot:
+        comma_idx = val_str.find(',')
+        dot_idx = val_str.find('.')
+        if comma_idx < dot_idx:
+            # Comma comes first, so comma is thousand separator, dot is decimal (US format)
+            val_str = val_str.replace(',', '')
+        else:
+            # Dot comes first, so dot is thousand separator, comma is decimal (Indonesian/European format)
+            val_str = val_str.replace('.', '').replace(',', '.')
+    elif has_comma:
+        # Only commas are present (e.g., 1,898,561,512 or 12,5)
+        # Check if the comma is a thousand separator or decimal separator
+        # In typical business metrics, if there are multiple commas, or if the single comma is followed by exactly 3 digits
+        # and we are dealing with large numbers, it is a thousand separator.
+        temp_str = val_str.replace(',', '')
         try:
-            return float(val_str)
+            parts = val_str.split(',')
+            if len(parts) == 2 and len(parts[1]) != 3:
+                return float(val_str.replace(',', '.'))
+            else:
+                return float(temp_str)
         except ValueError:
-            return 0.0
+            # Fallback to replacing comma with dot
+            try:
+                return float(val_str.replace(',', '.'))
+            except ValueError:
+                return 0.0
+    elif has_dot:
+        # Only dots are present (e.g., 1.898.561.512 or 12.5)
+        # If there are multiple dots, they are thousand separators
+        if val_str.count('.') > 1:
+            val_str = val_str.replace('.', '')
+            
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
 
 
 def find_column_by_prefix_and_suffix(df: pd.DataFrame, prefix: str, suffix: str) -> str | None:
@@ -442,3 +484,203 @@ def load_and_clean_data() -> pd.DataFrame:
             df["QUARTER"] = df["QUARTER"].astype(str).str.strip().str.upper()
             
     return df
+
+
+@st.cache_data(ttl=60)
+def load_monthly_impactful_data() -> list[list[str]]:
+    """Loads and caches monthly data from 'Impactful Telda New' sheet, falling back to data/sheet_raw.json."""
+    try:
+        sheet_url = st.secrets["spreadsheet"]["kpi_telda"]
+    except KeyError:
+        sheet_url = None
+        
+    if sheet_url:
+        try:
+            scopes = [
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            gc = gspread.authorize(creds)
+            sh = gc.open_by_url(sheet_url.strip())
+            ws = sh.worksheet("Impactful Telda New")
+            return ws.get_all_values()
+        except Exception:
+            pass
+            
+    # Fallback to local raw JSON if sheet fetch fails
+    import os
+    import json
+    local_json_path = os.path.join("data", "sheet_raw.json")
+    if os.path.exists(local_json_path):
+        try:
+            with open(local_json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+            
+    return []
+
+
+# ==========================================
+# Named Constants for 2026 Monthly KPI Scoring and Layout (G25, P2)
+# ==========================================
+KPI_WEIGHTS: dict[str, float] = {
+    "REV SME - POTS": 35.0,
+    "REV SME - NON POTS": 5.0,
+    "REV GOV": 5.0,
+    "REV PS": 5.0,
+    "REV SOE": 5.0,
+    "HSI ALL SEGMENT": 20.0,
+    "LTS": 3.0,
+    "BW": 5.0,
+    "OCA": 2.0,
+    "NETMONK": 3.0,
+    "EAZY": 3.0,
+    "PIJAR SEKOLAH": 2.0,
+    "C3MR": 5.0,
+    "VISIT": 2.0
+}
+
+TELDA_REGIONS: list[str] = [
+    "BATU", "BLITAR", "BOJONEGORO", "KEDIRI", 
+    "MADIUN", "MALANG", "NGANJUK", "PONOROGO"
+]
+
+MONTHS_2026: list[str] = [f"2026{m:02d}" for m in range(1, 13)]
+
+MONTHLY_HEADER_INDICES: list[int] = [
+    2, 12, 22, 32, 42, 52, 62, 72, 82, 92, 102, 112, 122, 132, 142, 152, 162, 172, 182
+]
+
+METRICS_MAPPING: dict[int, str] = {
+    1: "REV SME - POTS",
+    2: "REV SME - NON POTS",
+    3: "REV GOV",
+    4: "REV PS",
+    5: "REV SOE",
+    6: "TABEL HSI + TABEL WMS",
+    7: "BW",
+    8: "OCA",
+    9: "NETMONK",
+    10: "EAZY",
+    11: "PIJAR SEKOLAH",
+    12: "DO CTO",
+    13: "REAL SALES",
+    14: "TABEL VISIT & PROFILING",
+    15: "C3MR BAYAR",
+    16: "C3MR BILL"
+}
+
+METRIC_HEADERS_MAPPING: dict[int, list[int]] = {
+    1: [2],
+    2: [12],
+    3: [22],
+    4: [32],
+    5: [42],
+    6: [52, 62],  # Combines HSI (52) and WMS (62)
+    7: [72],
+    8: [82],
+    9: [92],
+    10: [102],
+    11: [112],
+    12: [122],
+    13: [132],
+    14: [142, 152, 162],  # Combines VISIT (142), PROF_SME (152), PROF_LEGS (162)
+    15: [172],
+    16: [182]
+}
+
+STANDARD_C3MR_TARGET: float = 98.0
+ACHIEVEMENT_CAP: float = 110.0
+LEFT_START_COL: int = 2
+RIGHT_START_COL: int = 17
+
+
+def load_and_clean_monthly_data() -> pd.DataFrame:
+    """Parses raw monthly grid data into a normalized, consolidated DataFrame (G30)."""
+    raw_data: list[list[str]] = load_monthly_impactful_data()
+    if not raw_data:
+        return pd.DataFrame()
+        
+    # Initialize normalized rows dictionary mapping (TELDA, MONTH) -> row values
+    db: dict[tuple[str, str], dict[str, float]] = {}
+    for w in TELDA_REGIONS:
+        for m in MONTHS_2026:
+            db[(w, m)] = {}
+            
+    # Parse Tables 1 to 16
+    for t_idx, headers in METRIC_HEADERS_MAPPING.items():
+        metric_name: str = METRICS_MAPPING[t_idx]
+        
+        for offset, w in enumerate(TELDA_REGIONS):
+            if metric_name == "TABEL VISIT & PROFILING":
+                # Special parsing logic for Visit & Profiling
+                # Target is always 5.0
+                # Realisasi = 0.5 * VISIT + 0.25 * PROF_SME + 0.25 * PROF_LEGS
+                visit_real = [0.0] * len(MONTHS_2026)
+                sme_real = [0.0] * len(MONTHS_2026)
+                legs_real = [0.0] * len(MONTHS_2026)
+                
+                for idx, h in enumerate(headers):
+                    row_idx: int = h + 1 + offset
+                    if row_idx >= len(raw_data):
+                        continue
+                    r_data: list[str] = [cell.strip() for cell in raw_data[row_idx]]
+                    
+                    for m_idx, m in enumerate(MONTHS_2026):
+                        r_col: int = RIGHT_START_COL + m_idx
+                        real_val: float = clean_numeric_val(r_data[r_col]) if r_col < len(r_data) else 0.0
+                        if idx == 0:
+                            visit_real[m_idx] = real_val
+                        elif idx == 1:
+                            sme_real[m_idx] = real_val
+                        elif idx == 2:
+                            legs_real[m_idx] = real_val
+                            
+                for m_idx, m in enumerate(MONTHS_2026):
+                    db[(w, m)][f"{metric_name} - TARGET"] = 5.0
+                    db[(w, m)][f"{metric_name} - REALIASASI"] = (
+                        0.5 * visit_real[m_idx] +
+                        0.25 * sme_real[m_idx] +
+                        0.25 * legs_real[m_idx]
+                    )
+            else:
+                for h in headers:
+                    row_idx: int = h + 1 + offset
+                    if row_idx >= len(raw_data):
+                        continue
+                    r_data: list[str] = [cell.strip() for cell in raw_data[row_idx]]
+                    
+                    for m_idx, m in enumerate(MONTHS_2026):
+                        l_col: int = LEFT_START_COL + m_idx
+                        r_col: int = RIGHT_START_COL + m_idx
+                        
+                        target_val: float = clean_numeric_val(r_data[l_col]) if l_col < len(r_data) else 0.0
+                        real_val: float = clean_numeric_val(r_data[r_col]) if r_col < len(r_data) else 0.0
+                        
+                        db[(w, m)][f"{metric_name} - TARGET"] = db[(w, m)].get(f"{metric_name} - TARGET", 0.0) + target_val
+                        db[(w, m)][f"{metric_name} - REALIASASI"] = db[(w, m)].get(f"{metric_name} - REALIASASI", 0.0) + real_val
+                        
+    # Transform database to a list of rows
+    final_rows: list[dict[str, Any]] = []
+    for (w, m), data in db.items():
+        row_dict: dict[str, Any] = {
+            "TELDA": w,
+            "MONTH": m
+        }
+        
+        for t_idx in range(1, 17):
+            metric_name: str = METRICS_MAPPING[t_idx]
+            
+            # Skip TARGET for DO CTO, REAL SALES, C3MR BAYAR, and C3MR BILL
+            if metric_name not in ["DO CTO", "REAL SALES", "C3MR BAYAR", "C3MR BILL"]:
+                row_dict[f"{metric_name} - TARGET"] = data.get(f"{metric_name} - TARGET", 0.0)
+                
+            row_dict[f"{metric_name} - REALIASASI"] = data.get(f"{metric_name} - REALIASASI", 0.0)
+            
+        final_rows.append(row_dict)
+        
+    df_result: pd.DataFrame = pd.DataFrame(final_rows)
+    return df_result

@@ -1,0 +1,42 @@
+## Dokumen Pemahaman Proyek (Project Context & Scope)
+
+---
+
+### 1. Latar Belakang & Konteks Masalah
+
+Anda sedang mengembangkan sebuah dashboard menggunakan **Streamlit** dengan sumber data tunggal yang berada di **Google Sheets / Spreadsheet**.
+
+Tantangan utama dalam proyek ini adalah **kondisi data yang tidak ternormalisasi dan menyatu dalam satu lembar kerja (*single sheet*)**. Data tidak dipisah berdasarkan tab/sheet, melainkan ditumpuk dan dijajarkan dalam satu ruang kerja yang sama, dipisahkan hanya oleh baris kosong dan kolom kosong sebagai pembatas visual.
+
+---
+
+### 2. Identifikasi Struktur Data Aktual
+
+berikut adalah arsitektur tata letak (*layout*) data yang sebenarnya:
+
+* **Lingkungan Data:** Hanya ada **1 Sheet (Tunggal)** yang menampung seluruh informasi.
+* **Tata Letak Blok Tabel (*Multi-table Layout*):** * Total **28 tabel** (14 Kategori $\times$ 2 Jenis) tersebar di dalam sheet tunggal tersebut.
+* Setiap tabel berdiri sebagai satu **Blok Independen**.
+* Antara blok tabel satu dengan blok tabel lainnya dipisahkan secara fisik oleh **baris kosong (vertikal)** dan **kolom kosong (horizontal)**.
+
+
+* **Format Internal Blok Tabel (*Statis*):**
+* Setiap blok memiliki struktur matriks yang seragam: Baris berisi wilayah (`TELDA`: BATU, BLITAR, dst.) dan 12 Kolom berisi dimensi waktu (`202601` - `202612`).
+
+* link sheet google https://docs.google.com/spreadsheets/d/1k63QChKwDN6eTJwcU6n5UNJRuc21Y42q8dwz4OsmV3Q/edit?pli=1&gid=201697417#gid=201697417 di tab sheet Impactful Telda New
+
+---
+
+### 3. Karakteristik & Sifat Data (*Data Behavior*)
+
+* **Statis Secara Jumlah Baris per Tabel:** Karena tidak ada penambahan atau pengurangan wilayah maupun bulan, koordinat posisi (rentang *cell/range*) setiap blok tabel di dalam sheet tersebut bersifat **permanen dan tidak bergeser**.
+* **Dinamis Secara Nilai:** Hanya angka nominal di dalam sel tiap blok yang berubah secara berkala.
+
+---
+
+### 4. Rumusan Masalah Utama
+
+Bagaimana cara menarik dan memilah data dari **28 blok tabel yang terfragmentasi di dalam satu sheet tunggal** ke Streamlit secara efisien, dengan tantangan teknis:
+
+1. **Parsing Data Grid:** Bagaimana Python/Streamlit dapat mengenali, memotong, dan membaca koordinat spesifik dari masing-masing 28 blok tabel yang terpisah oleh ruang kosong tersebut tanpa salah mengambil data.
+2. **Efisiensi API:** Memastikan proses pembacaan satu sheet besar ini tidak memakan waktu lama dan memanfaatkan caching Streamlit agar performa dashboard tetap instan saat *user* melakukan filter.
