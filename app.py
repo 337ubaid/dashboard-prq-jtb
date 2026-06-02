@@ -1,11 +1,7 @@
 import streamlit as st
+from utils.helpers import setup_page
 
-st.set_page_config(
-    page_title="PRQ Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+setup_page("PRQ Dashboard")
 
 def main() -> None:
     st.title("📊 PRQ Dashboard Main Page")
@@ -15,3 +11,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

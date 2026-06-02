@@ -25,6 +25,37 @@ def format_short_number(value: float) -> str:
         return f"{value:.0f}"
 
 
+def render_sidebar_sync() -> None:
+    """Renders a button in the sidebar to clear cache and rerun to sync data (G30)."""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        """
+        <div style="padding: 10px 0px 5px 0px;">
+            <span style="font-size: 14px; font-weight: 700; color: #1e3a8a; display: flex; align-items: center; gap: 6px;">
+                🔄 Sinkronisasi Data
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    if st.sidebar.button(
+        "Clear Cache & Sync",
+        key="sync_data_cache_btn",
+        use_container_width=True,
+        type="secondary",
+        help="Klik untuk menghapus cache aplikasi dan memuat ulang data terbaru."
+    ):
+        st.cache_data.clear()
+        st.sidebar.success("Cache berhasil dibersihkan! Memuat ulang...")
+        import time
+        time.sleep(0.5)
+        if hasattr(st, "rerun"):
+            st.rerun()
+        else:
+            st.experimental_rerun()
+
+
 def setup_page(title: str, icon: str = "📊") -> None:
     """Setup default page configuration and styling for all pages."""
     st.set_page_config(
@@ -44,6 +75,10 @@ def setup_page(title: str, icon: str = "📊") -> None:
             }
         </style>
     """, unsafe_allow_html=True)
+
+    # Render sync button in the sidebar (G30)
+    render_sidebar_sync()
+
 
 
 def highlight_totals(df: pd.DataFrame) -> pd.DataFrame:

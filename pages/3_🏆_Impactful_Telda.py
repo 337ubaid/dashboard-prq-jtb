@@ -269,7 +269,7 @@ def render_styled_dataframe(
         }
         styled_df = df.style.format(format_dict)
 
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    st.dataframe(styled_df, width='stretch', hide_index=True)
 
 
 def render_download_button(df: pd.DataFrame, filename: str, label: str) -> None:
@@ -678,7 +678,7 @@ def main() -> None:
         ach_cols = [(q, "ACH Asli") for q in ["Q1", "Q2", "Q3", "Q4"]]
         styled_qtd = styled_qtd.applymap(style_ach_col, subset=ach_cols)
 
-        st.dataframe(styled_qtd, use_container_width=True, hide_index=True)
+        st.dataframe(styled_qtd, width='stretch', hide_index=True)
         render_download_button(
             df_qtd,
             f"qtd_scorecard_{selected_telda.lower()}.csv",
@@ -823,7 +823,7 @@ def main() -> None:
         for c in df_filtered_single.columns
         if c not in ["TELDA", "MONTH"]
     }
-    st.dataframe(df_filtered_single.style.format(detail_format), use_container_width=True)
+    st.dataframe(df_filtered_single.style.format(detail_format), width='stretch')
 
 
 if __name__ == "__main__":
