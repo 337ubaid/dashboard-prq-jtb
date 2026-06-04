@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from streamlit_echarts import st_echarts
-from utils.data_processing import get_filter_options, get_pivoted_data_from_bq, get_layanan_pivoted_data_from_bq, get_top_bottom_pelanggan_from_bq
+from utils.data_processing import get_filter_options, get_pivoted_data_from_bq, get_layanan_pivoted_data_from_bq, get_layanan_pelanggan_pivoted_data_from_bq, get_top_bottom_pelanggan_from_bq
 from utils.helpers import setup_page, highlight_totals, format_short_number
 from data.processing import TARGET_REVENUE_BY_PERIOD
 
@@ -277,7 +277,20 @@ def render_layanan_tab(filters: dict[str, any]) -> None:
                 width="stretch"
             )
         else:
-            st.warning("Data kosong. Tidak ada data yang sesuai dengan filter yang dipilih.")
+            st.warning("Data kosong. Tidak ada data revenue yang sesuai dengan filter yang dipilih.")
+            
+        st.markdown("---")
+        st.subheader("Tabel Jumlah Pelanggan per Layanan")
+        
+        pivot_pelanggan_df = get_layanan_pelanggan_pivoted_data_from_bq(filters)
+        
+        if pivot_pelanggan_df is not None:
+            st.dataframe(
+                pivot_pelanggan_df.style.apply(highlight_totals, axis=None).format(thousands=".", precision=0), 
+                width="stretch"
+            )
+        else:
+            st.warning("Data kosong. Tidak ada data pelanggan yang sesuai dengan filter yang dipilih.")
 
 
 def render_pelanggan_tab(filters: dict[str, any]) -> None:

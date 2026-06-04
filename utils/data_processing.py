@@ -219,6 +219,45 @@ def get_layanan_pivoted_data_from_bq(filters: dict[str, any]) -> pd.DataFrame | 
     
     return pivot_df
 
+def get_layanan_pelanggan_pivoted_data_from_bq(filters: dict[str, any]) -> pd.DataFrame | None:
+    """
+    Melakukan query agregasi dan pivot jumlah pelanggan per layanan berdasarkan mapping GROUP5 di BigQuery.
+    """
+    where_sql = _build_where_clause(filters)
+    periods = _get_available_periods(where_sql)
+    
+    if not periods:
+        return None
+        
+    periods_in_clause = ", ".join([f"'{p}'" for p in periods])
+    layanan_case = _build_layanan_case_statement(layanan_dict)
+    
+    pivot_query = f"""
+    SELECT * FROM (
+      SELECT {layanan_case} as Layanan,
+             CONCAT(CAST(YEAR_ID AS STRING), '-', LPAD(CAST(MONTH_ID AS STRING), 2, '0')) as Periode,
+             NIPNAS_TEMP
+      FROM `{DATASET}.POTS_JOINED`
+      {where_sql}
+    )
+    PIVOT (
+      COUNT(DISTINCT NIPNAS_TEMP) FOR Periode IN ({periods_in_clause})
+    )
+    """
+    pivot_df = query_data(pivot_query)
+    
+    if pivot_df.empty:
+        return None
+        
+    pivot_df = _clean_pivot_dataframe(
+        pivot_df, 
+        index_col='Layanan', 
+        add_total_col=True, 
+        sort_by_total=True
+    )
+    
+    return pivot_df
+
 def get_top_bottom_pelanggan_from_bq(filters: dict[str, any], n: int = 10) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """
     Mengambil data Top N dan Bottom N NIPNAS_TEMP berdasarkan total REVENUE.
