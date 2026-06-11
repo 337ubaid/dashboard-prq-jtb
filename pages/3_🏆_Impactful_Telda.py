@@ -18,6 +18,7 @@ ACHIEVEMENT_CAP: float = 110.0
 
 ACH_EXCELLENT_THRESHOLD: float = 100.0
 ACH_GOOD_THRESHOLD: float = 90.0
+SCORECARD_TARGET_POINTS: float = 100.0
 
 QUARTER_MONTHS_MAPPING: dict[str, list[str]] = {
     "Q1": ["202601", "202602", "202603"],
@@ -185,6 +186,13 @@ def style_total_point_col(val: Any) -> str:
         return ""
 
 
+def _apply_style(styler: Any, style_func: Any, subset: Any = None) -> Any:
+    """Applies styling to a DataFrame Styler compatibility helper for different Pandas versions (G3, G5, G30)."""
+    if hasattr(styler, "map"):
+        return styler.map(style_func, subset=subset)
+    return styler.map(style_func, subset=subset)
+
+
 def _prepare_score_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Prepares, reorders, and sorts the Score/POINT dataframe by TOTAL descending (G30)."""
     df = df.copy()
@@ -248,15 +256,15 @@ def render_styled_dataframe(
     if is_score:
         num_cols = [c for c in df.columns if c != "TELDA"]
         format_dict = {c: (lambda x: f"{x:,.2f}" if pd.notna(x) else "-") for c in num_cols}
-        styled_df = df.style.format(format_dict).applymap(
-            style_total_point_col, subset=["TOTAL"]
+        styled_df = _apply_style(
+            df.style.format(format_dict), style_total_point_col, subset=["TOTAL"]
         )
     elif is_ach:
         format_dict = {
             c: (lambda x: f"{x:,.2f}%" if pd.notna(x) else "-") for c in metric_cols
         }
-        styled_df = df.style.format(format_dict).applymap(
-            style_ach_col, subset=metric_cols
+        styled_df = _apply_style(
+            df.style.format(format_dict), style_ach_col, subset=metric_cols
         )
     elif percentage_suffix:
         format_dict = {
@@ -444,7 +452,7 @@ def _render_monthly_trend_chart(
             "axisPointer": {"type": "cross"}
         },
         "legend": {
-            "data": ["Total Points (TELDA)", "Rata-rata Regional"],
+            "data": ["Total Points (TELDA)", "Rata-rata Regional", "Target Bulanan"],
             "top": "bottom"
         },
         "grid": {
@@ -463,7 +471,7 @@ def _render_monthly_trend_chart(
             "type": "value",
             "name": "Points",
             "min": 0,
-            "max": 100,
+            "max": 110,
             "splitLine": {"lineStyle": {"type": "dashed", "color": "#e2e8f0"}}
         },
         "series": [
@@ -491,6 +499,14 @@ def _render_monthly_trend_chart(
                 "smooth": True,
                 "lineStyle": {"width": 3, "type": "dashed", "color": "#f59e0b"},
                 "itemStyle": {"color": "#f59e0b"}
+            },
+            {
+                "name": "Target Bulanan",
+                "type": "line",
+                "data": [SCORECARD_TARGET_POINTS] * len(months),
+                "smooth": True,
+                "lineStyle": {"width": 2.5, "type": "dashed", "color": "#38bdf8"},
+                "itemStyle": {"color": "#38bdf8"}
             }
         ]
     }
@@ -676,7 +692,7 @@ def main() -> None:
 
         styled_qtd = df_qtd.style.format(format_qtd)
         ach_cols = [(q, "ACH Asli") for q in ["Q1", "Q2", "Q3", "Q4"]]
-        styled_qtd = styled_qtd.applymap(style_ach_col, subset=ach_cols)
+        styled_qtd = _apply_style(styled_qtd, style_ach_col, subset=ach_cols)
 
         st.dataframe(styled_qtd, width='stretch', hide_index=True)
         render_download_button(
