@@ -778,7 +778,7 @@ def main() -> None:
 
     # 4. Performance Storytelling Section
     st.markdown("---")
-    st.markdown("### 📈 Analisis Performa & Visualisasi Storytelling")
+    st.markdown("### 📈 Analisis Performa & Visualisasi")
     
     # Calculate monthly points trend for the chosen Telda & Regional Average
     trend_months = []
